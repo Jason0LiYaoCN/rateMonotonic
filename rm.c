@@ -1,6 +1,17 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>   //pow
+//////////////////////////////////////////////////////////////////////
+//// Task 1 STR (Real Time Systems)
+//// Rate Monotonic Scheduler
+//// 
+//// Author: Lucas Mior
+//// email: lucas.mior@acad.pucrs.br
+//// Date: 09/01/2015   September
+//// Modified: --
+//////////////////////////////////////////////////////////////////////
+
+
+#include <stdio.h>  
+#include <stdlib.h> // malloc
+#include <math.h>   // pow
 
 struct task
 {
@@ -9,30 +20,34 @@ struct task
     int d;
     int remainder;
     char id;
+    int deadline;
     int wantToProcess;
 }task;
 
-void Sort( struct task *tasks, int numberOfTasks );
-void VerifyPeriod( struct task *tasks, int numberOfTasks, int index );
-int WantToProcess( struct task *tasks, int numberOfTasks );
-char ChooseBetter( struct task *tasks, int numberOfTasks , char* timeline, int time, int *preemption );
-void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberOfTasks, int preemption );
-int haveDeadline( char task, int index, struct task *tasks, int numberOfTasks );
-int searchForProcess( struct task *tasks, int numberOfTasks, char prev );
-int TC( char *timeline, int time, struct task *, int numberOfTasks );
-void Line( int time );
-char getIdleProcess( );
+void Line               ( int );
+void Sort               ( struct task*, int );
+void VerifyPeriod       ( struct task*, int, int );
+void CalculateMetrics   ( char*, int, struct task*, int, int );
 
-int main( )
+char getIdleProcess     ( void );
+int wantToProcess       ( struct task*, int );
+int searchForProcess    ( struct task*, int, char );
+int haveDeadline        ( char, int, struct task*, int );
+int tc                  ( char*, int, struct task*, int );
+char chooseBetter       ( struct task*, int, char*, int , int* );
+
+int main( int argc, char **argv )
 {
     // Variables
     int numberOfTasks, time;
     char *timeline;
+    struct task *tasks;
+    
     int i;
     char id;
     int preemption = 0;
-    int scalabilityTest = 0;
-    struct task *tasks;
+    //int scalabilityTest = 0;
+    //int index;
     
     // Process
     do
@@ -54,6 +69,7 @@ int main( )
                 scanf( "%d %d %d", &tasks[i].c, &tasks[i].p, &tasks[i].d );
                 tasks[i].remainder = tasks[i].c;
                 tasks[i].wantToProcess = 0;
+                tasks[i].deadline = 0;
                 tasks[i].id = id;
                 id++;
                 //printf( "result %d %d %d id: %c\n", tasks[i].c, tasks[i].p, tasks[i].d, tasks[i].id );
@@ -61,11 +77,7 @@ int main( )
 
             // Sort the tasks by computing time
             Sort( tasks, numberOfTasks );
-            /*for( i = 0; i < numberOfTasks; i++ )
-            {
-                printf( "Task: c: %d and p: %d \n", tasks[i].c, tasks[i].p );
-            }*/
-            int index;
+
             // Start the scheduler
             for( i = 0; i < time; i++ )
             {
@@ -73,25 +85,15 @@ int main( )
 
                 VerifyPeriod( tasks, numberOfTasks, i );
 
-                rval = WantToProcess( tasks, numberOfTasks );
+                rval = wantToProcess( tasks, numberOfTasks );
                 if ( rval != 0 )
                 {
-                    timeline[i] = ChooseBetter( tasks, numberOfTasks, timeline, i, &preemption );
+                    timeline[i] = chooseBetter( tasks, numberOfTasks, timeline, i, &preemption );
                 }
                 else
                 {
                     timeline[i] = getIdleProcess( ); //change by a function that verify the process that passed the deadline and return a process or a ilde
                 }
-
-                //DEADLINE
-                /*for( index = 0; index < numberOfTasks; index++ )
-                {
-                    if( ( ( i % tasks[index].d ) == 0 ) && ( tasks[index].remainder > 0 ) )
-                    {
-                        printf( " task %c has deadline at %d. Remainder is %d\n", tasks[index].id, i, tasks[index].remainder );
-                    }
-                }*/
-
             }
 
             CalculateMetrics( timeline, time, tasks, numberOfTasks, preemption );
@@ -114,18 +116,24 @@ void VerifyPeriod( struct task *tasks, int numberOfTasks, int index )
         //printf( "DEBUG:: tasks[p].p: %d and ( time + 1 ): %d \n", tasks[p].p, time + 1 );
         // WARNING
         // Não estou verificando se processou tudo no tempo certo e nem deadline...
-        if( ( index % tasks[p].p ) == 0 )
+        //printf( "index: %d, id: %c result: %d, remainder: %d\n", index, tasks[p].id, index % tasks[p].p, tasks[p].remainder );
+        //printf( "IF %d == 0\n", ( index % tasks[p].p ) );
+        if( ( index % tasks[p].p ) == 0 && index != 0 )
         {
-            if( tasks[index].remainder > 0 )
+
+            if( tasks[p].remainder > 0 )
             {
-                printf( " task %c has deadline at %d. Remainder is %d\n", tasks[p].id, index, tasks[p].remainder );
+                // TODO add to a list 
+                tasks[p].deadline += 1;
+                //printf( "TASK %c has deadline at %d. Remainder is %d\n", tasks[p].id, index, tasks[p].remainder );
             }
             //printf( "DEBUG:: if id: %c \n", tasks[p].id );
             tasks[p].remainder = tasks[p].c ;
+            //printf( "id: %c receive more %d of computing \n", tasks[p].id, tasks[p].remainder );
         }
     }
 }
-int WantToProcess( struct task *tasks, int numberOfTasks )
+int wantToProcess( struct task *tasks, int numberOfTasks )
 {
     int i;
     int count = 0;
@@ -144,31 +152,35 @@ int WantToProcess( struct task *tasks, int numberOfTasks )
     return count;
 }
 
-char ChooseBetter( struct task *tasks, int numberOfTasks, char* timeline, int time, int *preemption )
+char chooseBetter( struct task *tasks, int numberOfTasks, char* timeline, int time, int *preemption )
 {
     int i;
-    int havePreemp = 0;
-    char better = 'x';
+    char better = 'x';  // error code
     for( i = 0; i < numberOfTasks; i++ )
     {
         if ( tasks[i].wantToProcess )
         {
-            //printf( "Remainder is %d\n", tasks[i].remainder );
-            tasks[i].remainder--;
-            better = tasks[i].id;
-            if( time != 0 )    //if 0 dont have preemption
+
+            if ( tasks[i].deadline > 0 )
             {
-                //printf( "Iam here\n" );
-                char prev = timeline[time-1];
-                //printf( "prev: %c, time %d\n", timeline[time-1], time );
-                if ( better != prev && ( searchForProcess( tasks, numberOfTasks, prev ) || prev == '.' ) )
-                {
-                    //printf( "preemption: %d, time %d\n", *preemption, time );
-                    *preemption = *preemption + 1;
-                    //printf( "preemption: %d\n", *preemption );
-                }
+                tasks[i].deadline--;
+                better = tasks[i].id + 0x20;
+            }
+            else
+            {
+                tasks[i].remainder--;
+                better = tasks[i].id;
             }
 
+            //TODO Test this part of code when we have BbB tc? preemp?
+            if( time != 0 )    //if 0 dont have preemption
+            {
+                char prev = timeline[time-1];
+                if ( better != prev && ( searchForProcess( tasks, numberOfTasks, prev ) || prev == '.' ) )
+                {
+                    *preemption +=  1;
+                }
+            }
             return better;
         }
     }
@@ -181,7 +193,6 @@ int searchForProcess( struct task *tasks, int numberOfTasks, char prev )
     {
         if( tasks[i].id == prev )
         {
-            //printf( "DEBUG:: %c %c %d\n", tasks[i].id, prev, tasks[i].wantToProcess );
             return tasks[i].wantToProcess;
         }
     }
@@ -214,12 +225,12 @@ void Sort( struct task *tasks, int numberOfTasks )
         }
     }
 }
-
+// /context switching
 int TC( char *timeline, int line, struct task *tasks, int numberOfTasks )
 {
-
-    // CHANGE numberOfTasksM
-    int i, tc = 0;
+    int i;
+    // TODO Verify it
+    int tc = 1;
     for( i = 0; i < line - 1; i++ )
     {
         if( timeline[i] != timeline[i + 1] )
@@ -254,7 +265,6 @@ int haveDeadline( char task, int index, struct task *tasks, int numberOfTasks )
 void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberOfTasks, int preemption )
 {
     int i;
-    //int scalabilityTest = 0;
     float u = 0;
     float limit = 0;
     
@@ -262,7 +272,6 @@ void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberO
 
     for( i = 0; i < numberOfTasks; i++ )
     {   
-        //scalabilityTest = 1 || 0;
         u += (float)tasks[i].c / (float)tasks[i].p;        
     }
     // Show the scheduler
@@ -273,16 +282,12 @@ void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberO
         printf( "%c", timeline[i] );
     }
     printf( "\n" );
-
     //Line( time );
-    //printf( "Troca de Contexto: %d\n", TC( timeline, time, tasks, numberOfTasks ) );
-    //printf( "Preempção: %d\n", preemption );
-    //printf( "Limit: %.4f\n", limit );
+
     printf( "%d %d\n", TC( timeline, time, tasks, numberOfTasks ), preemption );
-    printf( "%.4f %.4f \n", u, limit );
+    printf( "%.4f %.4f\n", u, limit );
 
     printf( "\n" );
-
 
 }
 

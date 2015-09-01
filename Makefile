@@ -1,5 +1,13 @@
+CC=gcc
+CFLAGS=-lm 
+
 all:
 	clear
-	gcc rm.c -o rm -lm
-	./rm < input.txt
+	$(CC) rm.c -o rm $(CFLAGS)
+	./rm < input.txt > output.txt
 	rm rm
+	cat output.txt
+
+clean:
+	rm rm
+	rm *.o
