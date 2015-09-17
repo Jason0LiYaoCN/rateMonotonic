@@ -8,6 +8,7 @@
 //// Modified: --
 //////////////////////////////////////////////////////////////////////
 
+//if last is idle premption ++
 
 #include <stdio.h>  
 #include <stdlib.h> // malloc
@@ -35,6 +36,9 @@ int searchForProcess    ( struct task*, int, char );
 int haveDeadline        ( char, int, struct task*, int );
 int tc                  ( char*, int, struct task*, int );
 char chooseBetter       ( struct task*, int, char*, int , int* );
+
+int dontHave( int, int*, int );
+void SortNumbers( int*, int );
 
 int main( int argc, char **argv )
 {
@@ -287,8 +291,73 @@ void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberO
     printf( "%d %d\n", TC( timeline, time, tasks, numberOfTasks ), preemption );
     printf( "%.4f %.4f\n", u, limit );
 
-    printf( "\n" );
+    printf( "\n" );    
 
+    int deadline = 0;
+    for( i = 0; i < numberOfTasks; i++ )
+    {
+        // Discovery the deadlines..
+        deadline = tasks[i].d;
+        int earlyDeadline[100000];  //Hard-Coded, change it.
+        int amount = 0;
+        for( i = 0; i < numberOfTasks; i++ )
+        {
+            int j;
+            int auxDeadline = tasks[i].d;        
+            while( auxDeadline < deadline )
+            {
+                if( dontHave( auxDeadline, earlyDeadline, amount ) )
+                {                
+                    earlyDeadline[amount] = auxDeadline;                
+                    auxDeadline += tasks[i].d;      
+                    amount++;
+                    SortNumbers( earlyDeadline, amount );
+                }
+            }
+            printf( "Task %d has %d: ", i, amount );
+            for( j = 0; j < amount; j++ )
+            {
+                printf( "%d | ", earlyDeadline[j] );
+            }
+            printf( "\n" );
+        }
+    }
+}
+
+int dontHave( int d, int* deadline, int size )
+{
+    if( size > 0 )
+    {   
+        int i;
+        for( i = 0; i < size; i++ )
+        {
+            if( d == deadline[i] )
+            {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+void SortNumbers( int* tasks, int numberOfTasks )
+{
+    int i, j;
+    int aux;
+    
+    for( i = 0; i < numberOfTasks - 1; i++ )
+    {    
+        for( j = 0; j < numberOfTasks - 1 - i; j++ )
+        {
+            aux        = tasks[j];
+            tasks[j]   = tasks[j+1];
+            tasks[j+1] = aux;
+        }
+    }
 }
 
 void Line( int time )
