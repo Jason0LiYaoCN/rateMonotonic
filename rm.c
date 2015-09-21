@@ -5,14 +5,12 @@
 //// Author: Lucas Mior
 //// email: lucas.mior@acad.pucrs.br
 //// Date: 09/01/2015   September
-//// Modified: --
+//// Modified: 09/20/2015   September
 //////////////////////////////////////////////////////////////////////
-
-//if last is idle premption ++
 
 #include <stdio.h>  
 #include <stdlib.h> // malloc
-#include <math.h>   // pow
+#include <math.h>   // pow, ceil
 
 struct task
 {
@@ -25,7 +23,6 @@ struct task
     int wantToProcess;
 }task;
 
-void Line               ( int );
 void Sort               ( struct task*, int );
 void VerifyPeriod       ( struct task*, int, int );
 void CalculateMetrics   ( char*, int, struct task*, int, int );
@@ -38,21 +35,17 @@ int tc                  ( char*, int, struct task*, int );
 char chooseBetter       ( struct task*, int, char*, int , int* );
 
 int dontHave( int, int*, int );
+int dontHaveCoef( char, struct task*, int );
 void SortNumbers( int*, int );
+float functionWU( struct task*, int, int*, int );
 
 int main( int argc, char **argv )
 {
     // Variables
-    int numberOfTasks, time;
-    char *timeline;
+    int numberOfTasks, time, preemption = 0, i;
+    char id, *timeline;
     struct task *tasks;
-    
-    int i;
-    char id;
-    int preemption = 0;
-    //int scalabilityTest = 0;
-    //int index;
-    
+
     // Process
     do
     {
@@ -76,7 +69,6 @@ int main( int argc, char **argv )
                 tasks[i].deadline = 0;
                 tasks[i].id = id;
                 id++;
-                //printf( "result %d %d %d id: %c\n", tasks[i].c, tasks[i].p, tasks[i].d, tasks[i].id );
             }
 
             // Sort the tasks by computing time
@@ -100,6 +92,10 @@ int main( int argc, char **argv )
                 }
             }
 
+            if( timeline[time-1] == '.' )
+            {
+                preemption++;
+            }
             CalculateMetrics( timeline, time, tasks, numberOfTasks, preemption );
         }
     }while( numberOfTasks != 0 );
@@ -117,26 +113,18 @@ void VerifyPeriod( struct task *tasks, int numberOfTasks, int index )
     // Verify end of period
     for( p = 0; p < numberOfTasks; p++ )
     {
-        //printf( "DEBUG:: tasks[p].p: %d and ( time + 1 ): %d \n", tasks[p].p, time + 1 );
-        // WARNING
-        // Não estou verificando se processou tudo no tempo certo e nem deadline...
-        //printf( "index: %d, id: %c result: %d, remainder: %d\n", index, tasks[p].id, index % tasks[p].p, tasks[p].remainder );
-        //printf( "IF %d == 0\n", ( index % tasks[p].p ) );
         if( ( index % tasks[p].p ) == 0 && index != 0 )
         {
 
             if( tasks[p].remainder > 0 )
             {
-                // TODO add to a list 
                 tasks[p].deadline += 1;
-                //printf( "TASK %c has deadline at %d. Remainder is %d\n", tasks[p].id, index, tasks[p].remainder );
             }
-            //printf( "DEBUG:: if id: %c \n", tasks[p].id );
             tasks[p].remainder = tasks[p].c ;
-            //printf( "id: %c receive more %d of computing \n", tasks[p].id, tasks[p].remainder );
         }
     }
 }
+
 int wantToProcess( struct task *tasks, int numberOfTasks )
 {
     int i;
@@ -180,7 +168,7 @@ char chooseBetter( struct task *tasks, int numberOfTasks, char* timeline, int ti
             if( time != 0 )    //if 0 dont have preemption
             {
                 char prev = timeline[time-1];
-                if ( better != prev && ( searchForProcess( tasks, numberOfTasks, prev ) || prev == '.' ) )
+                if ( better != prev && ( searchForProcess( tasks, numberOfTasks, prev ) || prev == getIdleProcess( ) ) )
                 {
                     *preemption +=  1;
                 }
@@ -200,7 +188,6 @@ int searchForProcess( struct task *tasks, int numberOfTasks, char prev )
             return tasks[i].wantToProcess;
         }
     }
-
     return 0;   //default value
 }
 
@@ -229,12 +216,12 @@ void Sort( struct task *tasks, int numberOfTasks )
         }
     }
 }
-// /context switching
+
+// context switching
 int TC( char *timeline, int line, struct task *tasks, int numberOfTasks )
 {
-    int i;
-    // TODO Verify it
-    int tc = 1;
+    int i, tc = 0;
+
     for( i = 0; i < line - 1; i++ )
     {
         if( timeline[i] != timeline[i + 1] )
@@ -250,12 +237,15 @@ int TC( char *timeline, int line, struct task *tasks, int numberOfTasks )
             }
         }
     }
+    // TODO Verify it
+    tc++;
     return tc;
 }
 
 int haveDeadline( char task, int index, struct task *tasks, int numberOfTasks )
 {
     int i;
+    
     for( i = 0; i < numberOfTasks; i++ )
     {
         if( ( tasks[i].id == task ) && ( tasks[i].d == index + 1 ) )
@@ -269,6 +259,7 @@ int haveDeadline( char task, int index, struct task *tasks, int numberOfTasks )
 void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberOfTasks, int preemption )
 {
     int i;
+    int deadline = 0;
     float u = 0;
     float limit = 0;
     
@@ -278,50 +269,91 @@ void CalculateMetrics( char *timeline, int time, struct task *tasks, int numberO
     {   
         u += (float)tasks[i].c / (float)tasks[i].p;        
     }
+    
     // Show the scheduler
-    //Line( time );
-    //printf( "|" );
     for( i = 0; i < time; i++ )
     {
         printf( "%c", timeline[i] );
     }
     printf( "\n" );
-    //Line( time );
-
+    
     printf( "%d %d\n", TC( timeline, time, tasks, numberOfTasks ), preemption );
     printf( "%.4f %.4f\n", u, limit );
 
-    printf( "\n" );    
-
-    int deadline = 0;
+    //printf( "Start here..\n" );
     for( i = 0; i < numberOfTasks; i++ )
     {
         // Discovery the deadlines..
-        deadline = tasks[i].d;
+        int j;
+        int amount = 1;
+        int coefficients = 1;
         int earlyDeadline[100000];  //Hard-Coded, change it.
-        int amount = 0;
-        for( i = 0; i < numberOfTasks; i++ )
+        struct task coef[numberOfTasks];
+    
+        deadline = tasks[i].d;  // Dont need, can use eD[0]
+        coef[0] = tasks[i];
+        earlyDeadline[0] = deadline;
+    
+        for( j = 0; j < numberOfTasks; j++ )
         {
-            int j;
-            int auxDeadline = tasks[i].d;        
-            while( auxDeadline < deadline )
+            int auxDeadline = tasks[j].d;        
+            //printf( "%d < %d\n", auxDeadline, deadline );
+            if( auxDeadline < deadline )
             {
-                if( dontHave( auxDeadline, earlyDeadline, amount ) )
-                {                
-                    earlyDeadline[amount] = auxDeadline;                
-                    auxDeadline += tasks[i].d;      
-                    amount++;
-                    SortNumbers( earlyDeadline, amount );
+                if( dontHaveCoef( tasks[j].id, coef, coefficients) )
+                {
+                    coef[coefficients] = tasks[j];
+                    coefficients++;
                 }
             }
-            printf( "Task %d has %d: ", i, amount );
-            for( j = 0; j < amount; j++ )
+            while( auxDeadline < deadline )
             {
-                printf( "%d | ", earlyDeadline[j] );
+
+                if( dontHave( auxDeadline, earlyDeadline, amount ) )
+                {        
+                    //printf( " Add: %d \n",auxDeadline );        
+                    earlyDeadline[amount] = auxDeadline;                
+                    amount++;
+                    SortNumbers( earlyDeadline, amount );
+                    //printf( " Added: %d \n",auxDeadline ); 
+                }
+                auxDeadline += tasks[j].d;      
             }
-            printf( "\n" );
+            //printf( "Task %d has: %d \n", i, amount );
         }
+        
+        functionWU( coef, coefficients, earlyDeadline, amount );
     }
+    printf( "\n" );    
+}
+
+float functionWU( struct task* coef, int coefficients, int* earlyDeadline, int amount )
+{
+    int s;
+
+    for( s = 0; s < amount; s++ )
+    {
+        float result = 0;
+        int d;
+        
+        // W operation
+        for( d = 0; d < coefficients; d++ )
+        {
+            float toCeil = (float)earlyDeadline[s] / coef[d].p;
+            int fromCeil = ceil( toCeil );
+            result += fromCeil * coef[d].c;
+        }
+
+        // U operation
+        result /= earlyDeadline[s];
+
+        if( s != amount-1 )         //to keep diff format
+        printf( "%.4f ", result );
+        else                        //to keep diff format 
+        printf( "%.4f", result );   //to keep diff format
+
+    }
+    printf( "\n" );
 }
 
 int dontHave( int d, int* deadline, int size )
@@ -329,9 +361,30 @@ int dontHave( int d, int* deadline, int size )
     if( size > 0 )
     {   
         int i;
+    
         for( i = 0; i < size; i++ )
         {
             if( d == deadline[i] )
+            {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+int dontHaveCoef( char d, struct task* deadline, int size )
+{
+    if( size > 0 )
+    {   
+        int i;
+        for( i = 0; i < size; i++ )
+        {
+            if( d == deadline[i].id )
             {
                 return 0;
             }
@@ -353,20 +406,12 @@ void SortNumbers( int* tasks, int numberOfTasks )
     {    
         for( j = 0; j < numberOfTasks - 1 - i; j++ )
         {
-            aux        = tasks[j];
-            tasks[j]   = tasks[j+1];
-            tasks[j+1] = aux;
+            if( tasks[j] > tasks[j+1] )
+            {
+                aux        = tasks[j];
+                tasks[j]   = tasks[j+1];
+                tasks[j+1] = aux;
+            }
         }
     }
-}
-
-void Line( int time )
-{
-    int i;
-    printf( "+" );
-    for( i = 0; i < time; i++ )
-    {
-        printf( "-" );
-    }
-    printf( "+\n" );
 }
